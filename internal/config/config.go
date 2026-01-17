@@ -5,12 +5,13 @@ import (
 )
 
 type Config struct {
-	TMDBAPIKey      string
-	OpenAIAPIKey    string
-	SupabaseURL     string
-	SupabaseKey     string
+	TMDBAPIKey        string
+	OpenAIAPIKey      string
+	SupabaseURL       string
+	SupabaseKey       string
 	SupabaseJWTSecret string
-	Port            string
+	DatabaseURL       string
+	Port              string
 }
 
 func LoadConfig() *Config {
@@ -20,6 +21,7 @@ func LoadConfig() *Config {
 		SupabaseURL:       getEnv("SUPABASE_URL", ""),
 		SupabaseKey:       getEnv("SUPABASE_ANON_KEY", ""),
 		SupabaseJWTSecret: getEnv("SUPABASE_JWT_SECRET", ""),
+		DatabaseURL:       getEnv("DATABASE_URL", ""),
 		Port:              getEnv("PORT", "8080"),
 	}
 }
