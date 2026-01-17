@@ -30,10 +30,13 @@ func main() {
 	// Initialize Repositories
 	mediaRepo := database.NewMediaRepository(dbClient.DB)
 	sessionRepo := database.NewSessionRepository(dbClient.DB)
+	voteRepo := database.NewVoteRepository(dbClient.DB)
 
 	// Initialize Handlers
 	mediaHandler := api.NewMediaHandler(tmdbClient, mediaRepo)
 	sessionHandler := api.NewSessionHandler(sessionRepo)
+	voteHandler := api.NewVoteHandler(voteRepo, sessionRepo)
+	matchHandler := api.NewMatchHandler(voteRepo)
 
 	// Initialize Router
 	mux := http.NewServeMux()
@@ -53,6 +56,11 @@ func main() {
 	// Protected endpoints - Sessions
 	mux.Handle("/api/sessions", authMiddleware(http.HandlerFunc(sessionHandler.CreateSession)))
 	mux.Handle("/api/sessions/", authMiddleware(http.HandlerFunc(sessionHandler.GetSession)))
+
+	// Protected endpoints - Voting
+	mux.Handle("/api/sessions/{id}/vote", authMiddleware(http.HandlerFunc(voteHandler.CastVote)))
+	mux.Handle("/api/sessions/{id}/complete", authMiddleware(http.HandlerFunc(sessionHandler.CompleteSession)))
+	mux.Handle("/api/sessions/{id}/matches", authMiddleware(http.HandlerFunc(matchHandler.GetMatches)))
 
 	// Protected endpoints - User info (example)
 	mux.Handle("/api/me", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +84,9 @@ func main() {
 	log.Printf("  GET  /api/media/search (protected)")
 	log.Printf("  POST /api/sessions (protected)")
 	log.Printf("  GET  /api/sessions/{id} (protected)")
+	log.Printf("  POST /api/sessions/{id}/vote (protected)")
+	log.Printf("  POST /api/sessions/{id}/complete (protected)")
+	log.Printf("  GET  /api/sessions/{id}/matches (protected)")
 
 	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
