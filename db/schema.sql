@@ -11,6 +11,9 @@ CREATE TYPE media_type AS ENUM ('movie', 'tv');
 -- Create enum for session status
 CREATE TYPE session_status AS ENUM ('active', 'completed');
 
+-- Create enum for vote types
+CREATE TYPE vote_type AS ENUM ('yes', 'no', 'maybe');
+
 -- ============================================================================
 -- TABLES
 -- ============================================================================
@@ -46,6 +49,30 @@ CREATE TABLE IF NOT EXISTS watch_sessions (
         ON DELETE CASCADE
 );
 
+-- Session Votes Table
+-- Stores user votes for media items within watch sessions
+CREATE TABLE IF NOT EXISTS session_votes (
+    session_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    media_id UUID NOT NULL,
+    vote vote_type NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Foreign keys
+    CONSTRAINT fk_session FOREIGN KEY (session_id)
+        REFERENCES watch_sessions(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_user FOREIGN KEY (user_id)
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_media FOREIGN KEY (media_id)
+        REFERENCES media_items(id)
+        ON DELETE CASCADE,
+
+    -- Unique constraint: one vote per user per media per session
+    CONSTRAINT unique_user_media_session UNIQUE (session_id, user_id, media_id)
+);
+
 -- ============================================================================
 -- INDEXES
 -- ============================================================================
@@ -77,6 +104,22 @@ CREATE INDEX IF NOT EXISTS idx_watch_sessions_created
 -- GIN index for efficient JSONB queries on metadata
 CREATE INDEX IF NOT EXISTS idx_media_items_metadata
     ON media_items USING GIN (metadata);
+
+-- Index for votes by session
+CREATE INDEX IF NOT EXISTS idx_session_votes_session
+    ON session_votes(session_id);
+
+-- Index for votes by user
+CREATE INDEX IF NOT EXISTS idx_session_votes_user
+    ON session_votes(user_id);
+
+-- Index for votes by media
+CREATE INDEX IF NOT EXISTS idx_session_votes_media
+    ON session_votes(media_id);
+
+-- Composite index for user votes in a session
+CREATE INDEX IF NOT EXISTS idx_session_votes_session_user
+    ON session_votes(session_id, user_id);
 
 -- ============================================================================
 -- TRIGGERS
@@ -130,6 +173,7 @@ CREATE TRIGGER set_watch_session_completed_at
 -- Enable RLS on tables
 ALTER TABLE media_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE watch_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE session_votes ENABLE ROW LEVEL SECURITY;
 
 -- Media Items Policies
 -- Allow authenticated users to read all media items
@@ -176,6 +220,43 @@ CREATE POLICY "Users can delete own sessions"
     TO authenticated
     USING (auth.uid() = creator_id);
 
+-- Session Votes Policies
+-- Users can read votes in sessions they created or participated in
+CREATE POLICY "Users can read session votes"
+    ON session_votes
+    FOR SELECT
+    TO authenticated
+    USING (
+        auth.uid() = user_id OR
+        EXISTS (
+            SELECT 1 FROM watch_sessions
+            WHERE watch_sessions.id = session_votes.session_id
+            AND watch_sessions.creator_id = auth.uid()
+        )
+    );
+
+-- Users can insert their own votes
+CREATE POLICY "Users can insert own votes"
+    ON session_votes
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (auth.uid() = user_id);
+
+-- Users can update their own votes
+CREATE POLICY "Users can update own votes"
+    ON session_votes
+    FOR UPDATE
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- Users can delete their own votes
+CREATE POLICY "Users can delete own votes"
+    ON session_votes
+    FOR DELETE
+    TO authenticated
+    USING (auth.uid() = user_id);
+
 -- ============================================================================
 -- COMMENTS
 -- ============================================================================
@@ -189,3 +270,9 @@ COMMENT ON TABLE watch_sessions IS 'Group watch sessions for collaborative movie
 COMMENT ON COLUMN watch_sessions.creator_id IS 'User ID of the session creator (references auth.users)';
 COMMENT ON COLUMN watch_sessions.status IS 'Session status: active or completed';
 COMMENT ON COLUMN watch_sessions.completed_at IS 'Timestamp when session was marked as completed';
+
+COMMENT ON TABLE session_votes IS 'Stores user votes for media items within watch sessions';
+COMMENT ON COLUMN session_votes.vote IS 'User vote: yes, no, or maybe';
+COMMENT ON COLUMN session_votes.session_id IS 'Watch session this vote belongs to';
+COMMENT ON COLUMN session_votes.user_id IS 'User who cast this vote (references auth.users)';
+COMMENT ON COLUMN session_votes.media_id IS 'Media item being voted on';
