@@ -1,0 +1,24 @@
+# Binaries
+bin/
+dist/
+main
+api
+
+# Dependencies
+vendor/
+
+# Environment
+.env
+
+# System
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# --- JetBrains ---
+.idea/
+*.iml
+*.iws
+out/
+
