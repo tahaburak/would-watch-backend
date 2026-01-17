@@ -35,6 +35,8 @@ func main() {
 	mediaRepo := database.NewMediaRepository(dbClient.DB)
 	sessionRepo := database.NewSessionRepository(dbClient.DB)
 	voteRepo := database.NewVoteRepository(dbClient.DB)
+	socialRepo := database.NewSocialRepository(dbClient.DB)
+	roomRepo := database.NewRoomRepository(dbClient.DB)
 
 	// Initialize Handlers
 	// Initialize Handlers
@@ -47,6 +49,10 @@ func main() {
 	openAIClient := openai.NewClient(cfg.OpenAIAPIKey)
 	recService := service.NewRecommendationService(openAIClient, tmdbClient, voteRepo, mediaRepo)
 	recHandler := api.NewRecommendationHandler(recService)
+
+	// Initialize Social & Room Handlers
+	socialHandler := api.NewSocialHandler(socialRepo)
+	roomHandler := api.NewRoomHandler(roomRepo, socialRepo)
 
 	// Initialize Router
 	mux := http.NewServeMux()
@@ -61,7 +67,7 @@ func main() {
 	})
 
 	// Auth middleware
-	authMiddleware := middleware.AuthMiddleware(cfg.SupabaseJWTSecret)
+	authMiddleware := middleware.AuthMiddleware(cfg.SupabaseURL)
 
 	// Protected endpoints - Media
 	mux.Handle("/api/media/search", authMiddleware(http.HandlerFunc(mediaHandler.SearchMovies)))
@@ -75,6 +81,31 @@ func main() {
 	mux.Handle("/api/sessions/{id}/complete", authMiddleware(http.HandlerFunc(sessionHandler.CompleteSession)))
 	mux.Handle("/api/sessions/{id}/matches", authMiddleware(http.HandlerFunc(matchHandler.GetMatches)))
 	mux.Handle("/api/sessions/{id}/recommendations", authMiddleware(http.HandlerFunc(recHandler.GetRecommendations)))
+
+	// Protected endpoints - Social
+	mux.Handle("/api/follows/", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			socialHandler.FollowUser(w, r)
+		} else if r.Method == http.MethodDelete {
+			socialHandler.UnfollowUser(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
+	mux.Handle("/api/me/following", authMiddleware(http.HandlerFunc(socialHandler.GetFollowing)))
+	mux.Handle("/api/users/search", authMiddleware(http.HandlerFunc(socialHandler.SearchUsers)))
+
+	// Protected endpoints - Rooms
+	mux.Handle("/api/rooms", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			roomHandler.CreateRoom(w, r)
+		} else if r.Method == http.MethodGet {
+			roomHandler.GetRooms(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
+	mux.Handle("/api/rooms/{id}/invite", authMiddleware(http.HandlerFunc(roomHandler.InviteToRoom)))
 
 	// Protected endpoints - User info (example)
 	mux.Handle("/api/me", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +132,14 @@ func main() {
 	log.Printf("  POST /api/sessions/{id}/vote (protected)")
 	log.Printf("  POST /api/sessions/{id}/complete (protected)")
 	log.Printf("  GET  /api/sessions/{id}/matches (protected)")
+	log.Printf("  GET  /api/sessions/{id}/recommendations (protected)")
+	log.Printf("  POST /api/follows/{id} (protected)")
+	log.Printf("  DELETE /api/follows/{id} (protected)")
+	log.Printf("  GET  /api/me/following (protected)")
+	log.Printf("  GET  /api/users/search (protected)")
+	log.Printf("  POST /api/rooms (protected)")
+	log.Printf("  GET  /api/rooms (protected)")
+	log.Printf("  POST /api/rooms/{id}/invite (protected)")
 
 	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
