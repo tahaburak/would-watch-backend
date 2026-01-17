@@ -121,3 +121,39 @@ func (c *Client) GetNowPlaying() (*MovieResponse, error) {
 
 	return &movieResp, nil
 }
+
+// GetMovieByID retrieves movie details by TMDB ID
+func (c *Client) GetMovieByID(tmdbID int) (*Movie, error) {
+	endpoint := fmt.Sprintf("%s/movie/%d", c.BaseURL, tmdbID)
+
+	params := url.Values{}
+	params.Add("api_key", c.APIKey)
+
+	fullURL := fmt.Sprintf("%s?%s", endpoint, params.Encode())
+
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("movie not found")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var movie Movie
+	if err := json.NewDecoder(resp.Body).Decode(&movie); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &movie, nil
+}
