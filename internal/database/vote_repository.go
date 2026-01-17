@@ -113,3 +113,35 @@ func (r *VoteRepository) GetMatchesForSession(ctx context.Context, sessionID uui
 
 	return matches, nil
 }
+
+// GetLikedMovies retrieves all movies with a "yes" vote in the session, along with their titles
+func (r *VoteRepository) GetLikedMovies(ctx context.Context, sessionID uuid.UUID) ([]string, error) {
+	query := `
+		SELECT DISTINCT m.title
+		FROM session_votes sv
+		JOIN media_items m ON sv.media_id = m.id
+		WHERE sv.session_id = $1 AND sv.vote = 'yes'
+		ORDER BY m.title
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query liked movies: %w", err)
+	}
+	defer rows.Close()
+
+	var titles []string
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err != nil {
+			return nil, fmt.Errorf("failed to scan title: %w", err)
+		}
+		titles = append(titles, title)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return titles, nil
+}

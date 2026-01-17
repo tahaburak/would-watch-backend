@@ -9,7 +9,11 @@ import (
 	"github.com/burak/would_watch/backend/internal/config"
 	"github.com/burak/would_watch/backend/internal/database"
 	"github.com/burak/would_watch/backend/internal/middleware"
+	"github.com/burak/would_watch/backend/internal/openai"
+	"github.com/burak/would_watch/backend/internal/service"
 	"github.com/burak/would_watch/backend/internal/tmdb"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
@@ -33,13 +37,22 @@ func main() {
 	voteRepo := database.NewVoteRepository(dbClient.DB)
 
 	// Initialize Handlers
+	// Initialize Handlers
 	mediaHandler := api.NewMediaHandler(tmdbClient, mediaRepo)
 	sessionHandler := api.NewSessionHandler(sessionRepo)
 	voteHandler := api.NewVoteHandler(voteRepo, sessionRepo)
 	matchHandler := api.NewMatchHandler(voteRepo)
 
+	// Initialize AI & Recommendations
+	openAIClient := openai.NewClient(cfg.OpenAIAPIKey)
+	recService := service.NewRecommendationService(openAIClient, tmdbClient, voteRepo, mediaRepo)
+	recHandler := api.NewRecommendationHandler(recService)
+
 	// Initialize Router
 	mux := http.NewServeMux()
+
+	// Apply CORS
+	handler := middleware.CORSMiddleware(mux)
 
 	// Public endpoints
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +74,7 @@ func main() {
 	mux.Handle("/api/sessions/{id}/vote", authMiddleware(http.HandlerFunc(voteHandler.CastVote)))
 	mux.Handle("/api/sessions/{id}/complete", authMiddleware(http.HandlerFunc(sessionHandler.CompleteSession)))
 	mux.Handle("/api/sessions/{id}/matches", authMiddleware(http.HandlerFunc(matchHandler.GetMatches)))
+	mux.Handle("/api/sessions/{id}/recommendations", authMiddleware(http.HandlerFunc(recHandler.GetRecommendations)))
 
 	// Protected endpoints - User info (example)
 	mux.Handle("/api/me", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +102,7 @@ func main() {
 	log.Printf("  POST /api/sessions/{id}/complete (protected)")
 	log.Printf("  GET  /api/sessions/{id}/matches (protected)")
 
-	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
+	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }
