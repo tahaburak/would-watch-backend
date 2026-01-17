@@ -120,3 +120,49 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// CompleteSession handles POST /api/sessions/{id}/complete
+func (h *SessionHandler) CompleteSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract session ID from URL path
+	// Expected format: /api/sessions/{id}/complete
+	path := r.URL.Path
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) != 4 || parts[3] != "complete" {
+		http.Error(w, "Invalid URL format", http.StatusBadRequest)
+		return
+	}
+
+	sessionIDStr := parts[2]
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		http.Error(w, "Invalid session ID format", http.StatusBadRequest)
+		return
+	}
+
+	ctx := context.Background()
+
+	// Complete the session
+	session, err := h.sessionRepo.CompleteSession(ctx, sessionID)
+	if err != nil {
+		log.Printf("Error completing session: %v", err)
+		http.Error(w, "Failed to complete session", http.StatusInternalServerError)
+		return
+	}
+
+	if session == nil {
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(session); err != nil {
+		log.Printf("Error encoding response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}

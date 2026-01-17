@@ -80,3 +80,32 @@ func (r *SessionRepository) GetSessionByID(ctx context.Context, sessionID uuid.U
 
 	return &session, nil
 }
+
+// CompleteSession marks a session as completed
+func (r *SessionRepository) CompleteSession(ctx context.Context, sessionID uuid.UUID) (*WatchSession, error) {
+	query := `
+		UPDATE watch_sessions
+		SET status = 'completed'
+		WHERE id = $1
+		RETURNING id, creator_id, status, created_at, updated_at, completed_at
+	`
+
+	var session WatchSession
+	err := r.db.QueryRowContext(ctx, query, sessionID).Scan(
+		&session.ID,
+		&session.CreatorID,
+		&session.Status,
+		&session.CreatedAt,
+		&session.UpdatedAt,
+		&session.CompletedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to complete session: %w", err)
+	}
+
+	return &session, nil
+}
