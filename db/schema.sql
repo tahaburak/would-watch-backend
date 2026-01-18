@@ -14,12 +14,38 @@ CREATE TYPE session_status AS ENUM ('active', 'completed');
 -- Create enum for vote types
 CREATE TYPE vote_type AS ENUM ('yes', 'no', 'maybe');
 
--- Create enum for invite preferences
+-- Create enum for invite preference
 CREATE TYPE invite_preference AS ENUM ('everyone', 'following', 'none');
+
+-- Create enum for room participant roles
+CREATE TYPE participant_role AS ENUM ('owner', 'admin', 'viewer');
+
+-- Create enum for participant status
+CREATE TYPE participant_status AS ENUM ('invited', 'joined', 'declined');
 
 -- ============================================================================
 -- TABLES
 -- ============================================================================
+
+-- Profiles Table (Public Profile Data & Settings)
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    username TEXT UNIQUE,
+    avatar_url TEXT,
+    invite_preference invite_preference NOT NULL DEFAULT 'following',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- User Follows Table (Social Graph)
+CREATE TABLE IF NOT EXISTS user_follows (
+    follower_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    following_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    PRIMARY KEY (follower_id, following_id),
+    CONSTRAINT no_self_follow CHECK (follower_id != following_id)
+);
 
 -- Media Items Table
 -- Stores movie and TV show information from TMDB
@@ -41,9 +67,9 @@ CREATE TABLE IF NOT EXISTS media_items (
 CREATE TABLE IF NOT EXISTS watch_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     creator_id UUID NOT NULL,
-    name TEXT,
-    is_public BOOLEAN DEFAULT false,
     status session_status NOT NULL DEFAULT 'active',
+    name TEXT, -- Optional room name
+    is_public BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     completed_at TIMESTAMPTZ,
@@ -52,6 +78,17 @@ CREATE TABLE IF NOT EXISTS watch_sessions (
     CONSTRAINT fk_creator FOREIGN KEY (creator_id)
         REFERENCES auth.users(id)
         ON DELETE CASCADE
+);
+
+-- Room Participants Table
+CREATE TABLE IF NOT EXISTS room_participants (
+    room_id UUID NOT NULL REFERENCES watch_sessions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    role participant_role NOT NULL DEFAULT 'viewer',
+    status participant_status NOT NULL DEFAULT 'invited',
+    joined_at TIMESTAMPTZ,
+    
+    PRIMARY KEY (room_id, user_id)
 );
 
 -- Session Votes Table
@@ -236,120 +273,39 @@ CREATE TRIGGER update_profiles_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
--- Function to automatically set completed_at when status changes to completed
-CREATE OR REPLACE FUNCTION set_completed_at()
+-- Function and Trigger to create profile on Signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.status = 'completed' AND OLD.status != 'completed' THEN
-        NEW.completed_at = NOW();
-    END IF;
-    RETURN NEW;
+  INSERT INTO public.profiles (id, username, avatar_url)
+  VALUES (
+    NEW.id,
+    NEW.raw_user_meta_data->>'username', -- Can be null initially
+    NEW.raw_user_meta_data->>'avatar_url'
+  );
+  RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to set completed_at timestamp
-DROP TRIGGER IF EXISTS set_watch_session_completed_at ON watch_sessions;
-CREATE TRIGGER set_watch_session_completed_at
-    BEFORE UPDATE ON watch_sessions
-    FOR EACH ROW
-    EXECUTE FUNCTION set_completed_at();
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================================
--- ROW LEVEL SECURITY (RLS)
+-- MIGRATIONS (Idempotent)
 -- ============================================================================
 
--- Enable RLS on tables
-ALTER TABLE media_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE watch_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE session_votes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_follows ENABLE ROW LEVEL SECURITY;
-ALTER TABLE room_participants ENABLE ROW LEVEL SECURITY;
+-- Ensure watch_sessions has new columns
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'watch_sessions' AND column_name = 'name') THEN
+        ALTER TABLE watch_sessions ADD COLUMN name TEXT;
+    END IF;
 
--- Media Items Policies
--- Allow authenticated users to read all media items
-CREATE POLICY "Allow authenticated users to read media items"
-    ON media_items
-    FOR SELECT
-    TO authenticated
-    USING (true);
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'watch_sessions' AND column_name = 'is_public') THEN
+        ALTER TABLE watch_sessions ADD COLUMN is_public BOOLEAN DEFAULT false;
+    END IF;
+END $$;
 
--- Allow authenticated users to insert media items
-CREATE POLICY "Allow authenticated users to insert media items"
-    ON media_items
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (true);
-
--- Watch Sessions Policies
--- Users can read sessions they created
-CREATE POLICY "Users can read own sessions"
-    ON watch_sessions
-    FOR SELECT
-    TO authenticated
-    USING (auth.uid() = creator_id);
-
--- Users can create sessions
-CREATE POLICY "Users can create sessions"
-    ON watch_sessions
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (auth.uid() = creator_id);
-
--- Users can update their own sessions
-CREATE POLICY "Users can update own sessions"
-    ON watch_sessions
-    FOR UPDATE
-    TO authenticated
-    USING (auth.uid() = creator_id)
-    WITH CHECK (auth.uid() = creator_id);
-
--- Users can delete their own sessions
-CREATE POLICY "Users can delete own sessions"
-    ON watch_sessions
-    FOR DELETE
-    TO authenticated
-    USING (auth.uid() = creator_id);
-
--- Session Votes Policies
--- Users can read votes in sessions they created or participated in
-CREATE POLICY "Users can read session votes"
-    ON session_votes
-    FOR SELECT
-    TO authenticated
-    USING (
-        auth.uid() = user_id OR
-        EXISTS (
-            SELECT 1 FROM watch_sessions
-            WHERE watch_sessions.id = session_votes.session_id
-            AND watch_sessions.creator_id = auth.uid()
-        )
-    );
-
--- Users can insert their own votes
-CREATE POLICY "Users can insert own votes"
-    ON session_votes
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (auth.uid() = user_id);
-
--- Users can update their own votes
-CREATE POLICY "Users can update own votes"
-    ON session_votes
-    FOR UPDATE
-    TO authenticated
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
-
--- Users can delete their own votes
-CREATE POLICY "Users can delete own votes"
-    ON session_votes
-    FOR DELETE
-    TO authenticated
-    USING (auth.uid() = user_id);
-
--- Profiles Policies
+-- Policies for Profiles (referencing id, not user_id)
 -- Users can read all profiles
+DROP POLICY IF EXISTS "Users can read all profiles" ON profiles;
 CREATE POLICY "Users can read all profiles"
     ON profiles
     FOR SELECT
@@ -357,19 +313,21 @@ CREATE POLICY "Users can read all profiles"
     USING (true);
 
 -- Users can insert their own profile
+DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
 CREATE POLICY "Users can insert own profile"
     ON profiles
     FOR INSERT
     TO authenticated
-    WITH CHECK (auth.uid() = user_id);
+    WITH CHECK (auth.uid() = id);
 
 -- Users can update their own profile
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 CREATE POLICY "Users can update own profile"
     ON profiles
     FOR UPDATE
     TO authenticated
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
+    USING (auth.uid() = id)
+    WITH CHECK (auth.uid() = id);
 
 -- User Follows Policies
 -- Users can read all follows

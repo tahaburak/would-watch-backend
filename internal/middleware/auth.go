@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -17,8 +18,18 @@ const (
 	UserIDKey ContextKey = "userID"
 )
 
-// AuthMiddleware creates a middleware that validates Supabase JWT tokens
-func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
+// AuthMiddleware creates a middleware that validates Supabase JWT tokens using JWKS
+func AuthMiddleware(supabaseURL string) func(http.Handler) http.Handler {
+	// Construct JWKS URL
+	jwksURL := fmt.Sprintf("%s/auth/v1/.well-known/jwks.json", supabaseURL)
+	
+	// Create JWKS keyfunc
+	// In a real app, you might want to handle initialization error better or retry
+	jwks, err := keyfunc.NewDefault([]string{jwksURL})
+	if err != nil {
+		fmt.Printf("Failed to create JWKS from resource at the given URL.\nError: %s\n", err)
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Extract token from Authorization header
@@ -37,16 +48,11 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 
 			tokenString := parts[1]
 
-			// Parse and validate the JWT token
-			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-				// Verify signing method
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-				}
-				return []byte(jwtSecret), nil
-			})
+			// Parse and validate the JWT token using the JWKS keyfunc
+			token, err := jwt.Parse(tokenString, jwks.Keyfunc)
 
 			if err != nil {
+				fmt.Printf("Token validation error: %v\n", err) // Debug log
 				http.Error(w, fmt.Sprintf("Invalid token: %v", err), http.StatusUnauthorized)
 				return
 			}
