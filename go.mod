@@ -1,6 +1,6 @@
 module github.com/burak/would_watch/backend
 
-go 1.25.6
+go 1.23
 
 require (
 	github.com/MicahParks/keyfunc/v3 v3.7.0
