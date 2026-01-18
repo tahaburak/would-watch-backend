@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/burak/would_watch/backend/internal/database"
-	"github.com/burak/would_watch/backend/internal/tmdb"
+	"github.com/tahaburak/would-watch-backend/internal/database"
+	"github.com/tahaburak/would-watch-backend/internal/tmdb"
 	"github.com/google/uuid"
 )
 

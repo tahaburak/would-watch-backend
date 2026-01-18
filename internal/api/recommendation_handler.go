@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/burak/would_watch/backend/internal/middleware"
-	"github.com/burak/would_watch/backend/internal/service"
+	"github.com/tahaburak/would-watch-backend/internal/middleware"
+	"github.com/tahaburak/would-watch-backend/internal/service"
 	"github.com/google/uuid"
 )
 

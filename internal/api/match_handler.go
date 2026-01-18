@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/burak/would_watch/backend/internal/database"
+	"github.com/tahaburak/would-watch-backend/internal/database"
 	"github.com/google/uuid"
 )
 

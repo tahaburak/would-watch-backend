@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -367,7 +368,7 @@ func TestSocialRepository_SearchUsers(t *testing.T) {
 		// Create 25 users with similar names
 		for i := 0; i < 25; i++ {
 			userID := uuid.New()
-			testDB.SeedProfile(t, userID, "test_user")
+			testDB.SeedProfile(t, userID, fmt.Sprintf("test_user_%d", i))
 		}
 
 		users, err := repo.SearchUsers(ctx, "test_user")

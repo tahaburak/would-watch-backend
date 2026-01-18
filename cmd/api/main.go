@@ -5,13 +5,13 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/burak/would_watch/backend/internal/api"
-	"github.com/burak/would_watch/backend/internal/config"
-	"github.com/burak/would_watch/backend/internal/database"
-	"github.com/burak/would_watch/backend/internal/middleware"
-	"github.com/burak/would_watch/backend/internal/openai"
-	"github.com/burak/would_watch/backend/internal/service"
-	"github.com/burak/would_watch/backend/internal/tmdb"
+	"github.com/tahaburak/would-watch-backend/internal/api"
+	"github.com/tahaburak/would-watch-backend/internal/config"
+	"github.com/tahaburak/would-watch-backend/internal/database"
+	"github.com/tahaburak/would-watch-backend/internal/middleware"
+	"github.com/tahaburak/would-watch-backend/internal/openai"
+	"github.com/tahaburak/would-watch-backend/internal/service"
+	"github.com/tahaburak/would-watch-backend/internal/tmdb"
 
 	_ "github.com/joho/godotenv/autoload"
 )

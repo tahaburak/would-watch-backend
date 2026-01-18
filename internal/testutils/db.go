@@ -55,6 +55,7 @@ func (tdb *TestDB) Cleanup(t *testing.T) {
 		"media_items",
 		"user_follows",
 		"profiles",
+		"auth.users",
 	}
 
 	for _, table := range tables {
@@ -90,17 +91,31 @@ func (tdb *TestDB) SeedUser(t *testing.T, email string) uuid.UUID {
 	return userID
 }
 
-// SeedProfile creates a test profile
+// SeedProfile creates a test profile (and corresponding auth.users entry)
 func (tdb *TestDB) SeedProfile(t *testing.T, userID uuid.UUID, username string) {
 	t.Helper()
 
+	// First, ensure auth.users entry exists
+	authQuery := `
+		INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, created_at, updated_at)
+		VALUES ($1, $2, 'test_password', NOW(), NOW(), NOW())
+		ON CONFLICT (id) DO NOTHING
+	`
+
+	email := username + "@test.com"
+	_, err := tdb.DB.Exec(authQuery, userID, email)
+	if err != nil {
+		t.Fatalf("Failed to seed auth.users: %v", err)
+	}
+
+	// Then create/update the profile
 	query := `
 		INSERT INTO profiles (id, username, invite_preference, created_at, updated_at)
 		VALUES ($1, $2, 'everyone', NOW(), NOW())
 		ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username
 	`
 
-	_, err := tdb.DB.Exec(query, userID, username)
+	_, err = tdb.DB.Exec(query, userID, username)
 	if err != nil {
 		t.Fatalf("Failed to seed profile: %v", err)
 	}

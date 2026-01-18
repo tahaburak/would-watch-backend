@@ -10,7 +10,7 @@ import (
 
 // Profile represents a user profile
 type Profile struct {
-	UserID           uuid.UUID `json:"user_id"`
+	UserID           uuid.UUID `json:"id"`
 	Username         *string   `json:"username,omitempty"`
 	InvitePreference string    `json:"invite_preference"`
 	CreatedAt        string    `json:"created_at"`
@@ -30,9 +30,9 @@ func NewSocialRepository(db *sql.DB) *SocialRepository {
 // GetProfile retrieves a user's profile
 func (r *SocialRepository) GetProfile(ctx context.Context, userID uuid.UUID) (*Profile, error) {
 	query := `
-		SELECT user_id, username, invite_preference, created_at, updated_at
+		SELECT id, username, invite_preference, created_at, updated_at
 		FROM profiles
-		WHERE user_id = $1
+		WHERE id = $1
 	`
 
 	var profile Profile
@@ -57,9 +57,9 @@ func (r *SocialRepository) GetProfile(ctx context.Context, userID uuid.UUID) (*P
 // CreateOrUpdateProfile creates or updates a user's profile
 func (r *SocialRepository) CreateOrUpdateProfile(ctx context.Context, userID uuid.UUID, username string, invitePreference string) error {
 	query := `
-		INSERT INTO profiles (user_id, username, invite_preference)
+		INSERT INTO profiles (id, username, invite_preference)
 		VALUES ($1, $2, $3)
-		ON CONFLICT (user_id)
+		ON CONFLICT (id)
 		DO UPDATE SET
 			username = EXCLUDED.username,
 			invite_preference = EXCLUDED.invite_preference,
@@ -108,9 +108,9 @@ func (r *SocialRepository) UnfollowUser(ctx context.Context, followerID, followi
 // GetFollowing retrieves users that a user is following
 func (r *SocialRepository) GetFollowing(ctx context.Context, userID uuid.UUID) ([]Profile, error) {
 	query := `
-		SELECT p.user_id, p.username, p.invite_preference, p.created_at, p.updated_at
+		SELECT p.id, p.username, p.invite_preference, p.created_at, p.updated_at
 		FROM profiles p
-		INNER JOIN user_follows uf ON p.user_id = uf.following_id
+		INNER JOIN user_follows uf ON p.id = uf.following_id
 		WHERE uf.follower_id = $1
 		ORDER BY p.username
 	`
@@ -165,7 +165,7 @@ func (r *SocialRepository) IsFollowing(ctx context.Context, followerID, followin
 // SearchUsers searches for users by username or email
 func (r *SocialRepository) SearchUsers(ctx context.Context, query string) ([]Profile, error) {
 	searchQuery := `
-		SELECT p.user_id, p.username, p.invite_preference, p.created_at, p.updated_at
+		SELECT p.id, p.username, p.invite_preference, p.created_at, p.updated_at
 		FROM profiles p
 		WHERE p.username ILIKE $1
 		LIMIT 20

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/burak/would_watch/backend/internal/database"
-	"github.com/burak/would_watch/backend/internal/openai"
-	"github.com/burak/would_watch/backend/internal/tmdb"
+	"github.com/tahaburak/would-watch-backend/internal/database"
+	"github.com/tahaburak/would-watch-backend/internal/openai"
+	"github.com/tahaburak/would-watch-backend/internal/tmdb"
 	"github.com/google/uuid"
 )
 

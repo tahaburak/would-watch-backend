@@ -1,3 +1,19 @@
+-- Test Schema for Would Watch Backend
+-- This creates a minimal auth schema for testing purposes
+
+-- Create auth schema (mimics Supabase auth)
+CREATE SCHEMA IF NOT EXISTS auth;
+
+-- Create minimal auth.users table for testing  
+CREATE TABLE IF NOT EXISTS auth.users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT UNIQUE NOT NULL,
+    encrypted_password TEXT,
+    email_confirmed_at TIMESTAMPTZ,
+    raw_user_meta_data JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 -- Would Watch Backend - Database Schema
 -- This schema should be run against your Supabase PostgreSQL database
 
