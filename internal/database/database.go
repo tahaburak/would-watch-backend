@@ -24,6 +24,15 @@ func NewClient(databaseURL string) (*Client, error) {
 		return nil, fmt.Errorf("database URL is required")
 	}
 
+	// Force simple protocol to avoid prepared statement issues with Supabase transaction poolers
+	if !strings.Contains(databaseURL, "default_query_exec_mode") {
+		separator := "?"
+		if strings.Contains(databaseURL, "?") {
+			separator = "&"
+		}
+		databaseURL += separator + "default_query_exec_mode=simple_protocol"
+	}
+
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
