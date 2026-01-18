@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  test-db:
+    image: postgres:15-alpine
+    container_name: would_watch_test_db
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: would_watch_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d would_watch_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test_net
+
+networks:
+  test_net:
+    driver: bridge
