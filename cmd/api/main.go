@@ -93,6 +93,15 @@ func main() {
 		}
 	})))
 	mux.Handle("/api/me/following", authMiddleware(http.HandlerFunc(socialHandler.GetFollowing)))
+	mux.Handle("/api/me/profile", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			socialHandler.GetProfile(w, r)
+		} else if r.Method == http.MethodPut {
+			socialHandler.UpdateProfile(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
 	mux.Handle("/api/users/search", authMiddleware(http.HandlerFunc(socialHandler.SearchUsers)))
 
 	// Protected endpoints - Rooms

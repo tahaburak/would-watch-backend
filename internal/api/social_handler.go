@@ -205,3 +205,105 @@ func (h *SocialHandler) SearchUsers(w http.ResponseWriter, r *http.Request) {
 		"count": len(users),
 	})
 }
+
+// GetProfile handles GET /api/me/profile
+func (h *SocialHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userIDStr, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "User ID not found", http.StatusUnauthorized)
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	ctx := context.Background()
+	profile, err := h.socialRepo.GetProfile(ctx, userID)
+	if err != nil {
+		log.Printf("Error getting profile: %v", err)
+		http.Error(w, "Failed to get profile", http.StatusInternalServerError)
+		return
+	}
+
+	if profile == nil {
+		// Return 404 or empty profile? Let's return 404 so frontend knows to create one
+		http.Error(w, "Profile not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(profile)
+}
+
+type UpdateProfileRequest struct {
+	Username         string `json:"username"`
+	InvitePreference string `json:"invite_preference"`
+}
+
+// UpdateProfile handles PUT /api/me/profile
+func (h *SocialHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userIDStr, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "User ID not found", http.StatusUnauthorized)
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate inputs
+	if req.Username == "" {
+		http.Error(w, "Username is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.InvitePreference != "everyone" && req.InvitePreference != "following" && req.InvitePreference != "none" {
+		http.Error(w, "Invalid invite preference", http.StatusBadRequest)
+		return
+	}
+
+	ctx := context.Background()
+	if err := h.socialRepo.CreateOrUpdateProfile(ctx, userID, req.Username, req.InvitePreference); err != nil {
+		log.Printf("Error updating profile: %v", err)
+		// Check for unique violation on username
+		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
+			http.Error(w, "Username already taken", http.StatusConflict)
+			return
+		}
+		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
+		return
+	}
+
+	// Fetch updated profile to return
+	profile, err := h.socialRepo.GetProfile(ctx, userID)
+	if err != nil {
+		log.Printf("Error returning updated profile: %v", err)
+		w.WriteHeader(http.StatusOK) // Action succeeded anyway
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(profile)
+}
