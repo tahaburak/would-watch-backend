@@ -23,3 +23,7 @@ vendor/
 out/
 
 .env
+
+# Tests
+coverage.out
+test.db
