@@ -22,7 +22,7 @@ const (
 func AuthMiddleware(supabaseURL string) func(http.Handler) http.Handler {
 	// Construct JWKS URL
 	jwksURL := fmt.Sprintf("%s/auth/v1/.well-known/jwks.json", supabaseURL)
-	
+
 	// Create JWKS keyfunc
 	// In a real app, you might want to handle initialization error better or retry
 	jwks, err := keyfunc.NewDefault([]string{jwksURL})
@@ -47,6 +47,12 @@ func AuthMiddleware(supabaseURL string) func(http.Handler) http.Handler {
 			}
 
 			tokenString := parts[1]
+
+			// If JWKS failed to initialize, return error
+			if jwks == nil {
+				http.Error(w, "Authentication service unavailable", http.StatusServiceUnavailable)
+				return
+			}
 
 			// Parse and validate the JWT token using the JWKS keyfunc
 			token, err := jwt.Parse(tokenString, jwks.Keyfunc)
