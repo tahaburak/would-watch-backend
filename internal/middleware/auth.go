@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,8 +20,13 @@ const (
 
 // AuthMiddleware creates a middleware that validates Supabase JWT tokens using JWT secret
 func AuthMiddleware(supabaseURL string, jwtSecret string) func(http.Handler) http.Handler {
-	// Convert JWT secret from string to byte slice
-	secretKey := []byte(jwtSecret)
+	// Decode base64-encoded JWT secret
+	secretKey, err := base64.StdEncoding.DecodeString(jwtSecret)
+	if err != nil {
+		fmt.Printf("Failed to decode JWT secret: %v\n", err)
+		// Fallback to using the secret as-is if it's not base64
+		secretKey = []byte(jwtSecret)
+	}
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
