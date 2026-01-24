@@ -67,7 +67,7 @@ func main() {
 	})
 
 	// Auth middleware
-	authMiddleware := middleware.AuthMiddleware(cfg.SupabaseURL)
+	authMiddleware := middleware.AuthMiddleware(cfg.SupabaseURL, cfg.SupabaseJWTSecret)
 
 	// Protected endpoints - Media
 	mux.Handle("/api/media/search", authMiddleware(http.HandlerFunc(mediaHandler.SearchMovies)))

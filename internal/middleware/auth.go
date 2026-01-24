@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -18,17 +17,10 @@ const (
 	UserIDKey ContextKey = "userID"
 )
 
-// AuthMiddleware creates a middleware that validates Supabase JWT tokens using JWKS
-func AuthMiddleware(supabaseURL string) func(http.Handler) http.Handler {
-	// Construct JWKS URL
-	jwksURL := fmt.Sprintf("%s/auth/v1/.well-known/jwks.json", supabaseURL)
-
-	// Create JWKS keyfunc
-	// In a real app, you might want to handle initialization error better or retry
-	jwks, err := keyfunc.NewDefault([]string{jwksURL})
-	if err != nil {
-		fmt.Printf("Failed to create JWKS from resource at the given URL.\nError: %s\n", err)
-	}
+// AuthMiddleware creates a middleware that validates Supabase JWT tokens using JWT secret
+func AuthMiddleware(supabaseURL string, jwtSecret string) func(http.Handler) http.Handler {
+	// Convert JWT secret from string to byte slice
+	secretKey := []byte(jwtSecret)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,14 +40,14 @@ func AuthMiddleware(supabaseURL string) func(http.Handler) http.Handler {
 
 			tokenString := parts[1]
 
-			// If JWKS failed to initialize, return error
-			if jwks == nil {
-				http.Error(w, "Authentication service unavailable", http.StatusServiceUnavailable)
-				return
-			}
-
-			// Parse and validate the JWT token using the JWKS keyfunc
-			token, err := jwt.Parse(tokenString, jwks.Keyfunc)
+			// Parse and validate the JWT token using the JWT secret
+			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+				// Verify the signing method is HMAC
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+				}
+				return secretKey, nil
+			})
 
 			if err != nil {
 				fmt.Printf("Token validation error: %v\n", err) // Debug log
