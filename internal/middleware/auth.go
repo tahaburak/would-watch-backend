@@ -18,14 +18,25 @@ const (
 	UserIDKey ContextKey = "userID"
 )
 
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // AuthMiddleware creates a middleware that validates Supabase JWT tokens using JWT secret
 func AuthMiddleware(supabaseURL string, jwtSecret string) func(http.Handler) http.Handler {
 	// Decode base64-encoded JWT secret
+	fmt.Printf("🔐 [AuthMiddleware] JWT secret (first 20 chars): %s...\n", jwtSecret[:min(20, len(jwtSecret))])
 	secretKey, err := base64.StdEncoding.DecodeString(jwtSecret)
 	if err != nil {
-		fmt.Printf("Failed to decode JWT secret: %v\n", err)
+		fmt.Printf("❌ [AuthMiddleware] Failed to decode JWT secret: %v\n", err)
 		// Fallback to using the secret as-is if it's not base64
 		secretKey = []byte(jwtSecret)
+	} else {
+		fmt.Printf("✅ [AuthMiddleware] JWT secret decoded successfully, %d bytes\n", len(secretKey))
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -46,17 +57,22 @@ func AuthMiddleware(supabaseURL string, jwtSecret string) func(http.Handler) htt
 
 			tokenString := parts[1]
 
+			fmt.Printf("🔐 [AuthMiddleware] Validating token (first 50 chars): %s...\n", tokenString[:min(50, len(tokenString))])
+			fmt.Printf("🔐 [AuthMiddleware] Using secret key of %d bytes\n", len(secretKey))
+
 			// Parse and validate the JWT token using the JWT secret
 			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 				// Verify the signing method is HMAC
 				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					fmt.Printf("❌ [AuthMiddleware] Unexpected signing method: %v\n", token.Header["alg"])
 					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 				}
+				fmt.Printf("✅ [AuthMiddleware] Signing method is HMAC: %v\n", token.Method.Alg())
 				return secretKey, nil
 			})
 
 			if err != nil {
-				fmt.Printf("Token validation error: %v\n", err) // Debug log
+				fmt.Printf("❌ [AuthMiddleware] Token validation error: %v\n", err) // Debug log
 				http.Error(w, fmt.Sprintf("Invalid token: %v", err), http.StatusUnauthorized)
 				return
 			}
